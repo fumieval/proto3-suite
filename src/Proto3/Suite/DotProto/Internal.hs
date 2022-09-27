@@ -18,7 +18,7 @@ module Proto3.Suite.DotProto.Internal where
 import           Control.Applicative
 import qualified Control.Foldl             as FL
 import           Control.Lens              (Lens', lens, over)
-import           Control.Lens.Cons         (_head)
+import           Control.Lens.Cons         (_head, _tail)
 import           Control.Monad
 import           Control.Monad.Except
 import           Data.Bifunctor            (first)
@@ -390,7 +390,10 @@ concatDotProtoIdentifier i1 i2 = case (i1, i2) of
 toPascalCase :: String -> String
 toPascalCase xs = foldMap go (segmentBy (== '_') xs)
   where
-    go (Left seg) = toUpperFirst seg
+    go (Left seg)
+      -- Convert VERY_LONG_NAME into VeryLongName rather than VERYLONGNAME
+      | all isUpper seg = over _tail (map toLower) seg
+      | otherwise = toUpperFirst seg
     go (Right seg)
       | seg == "__" = "_"
       | otherwise = ""
