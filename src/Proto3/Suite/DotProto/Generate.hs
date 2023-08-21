@@ -1717,38 +1717,7 @@ dotProtoServiceD stringType pkgSpec ctxt serviceIdent service = do
             HsTypeSig defaultSrcLoc [ HsIdent serverFuncName ]
                         (HsQualType [] (HsTyFun serverT (HsTyFun serviceOptionsC ioActionT)))
 
-     let serviceServerD = HsFunBind [serverFuncD]
-           where
-             serverFuncD =
-               match_ (HsIdent serverFuncName)
-                      [ HsPRec (unqual_ serviceName)
-                               [ HsPFieldPat (unqual_ methodName) (HsPVar (HsIdent methodName))
-                               | (_, methodName, _, _, _) <- fieldsD
-                               ]
-                      , HsPApp (unqual_ "ServiceOptions")
-                               [ patVar "serverHost"
-                               , patVar "serverPort"
-                               , patVar "useCompression"
-                               , patVar "userAgentPrefix"
-                               , patVar "userAgentSuffix"
-                               , patVar "initialMetadata"
-                               , patVar "sslConfig"
-                               , patVar "logger"
-                               , patVar "serverMaxReceiveMessageLength"
-                               , patVar "serverMaxMetadataSize"
-                               ]
-                      ]
-                      (HsUnGuardedRhs (apply serverLoopE [ serverOptsE ]))
-                      []
-
-             handlerE handlerC adapterE methodName hsName =
-                 apply handlerC [ apply methodNameC [ str_ methodName ]
-                                , apply adapterE [ uvar_ hsName ]
-                                ]
-
-             update u v = HsFieldUpdate (unqual_ u) (uvar_ v)
-
-             serverOptsE = HsRecUpdate defaultOptionsE
+     let serverOptsE = HsRecUpdate defaultOptionsE
                  [ HsFieldUpdate (grpcName "optNormalHandlers") $
                        HsList [ handlerE unaryHandlerC convertServerHandlerE endpointName hsName
                               | (endpointName, hsName, NonStreaming, NonStreaming, _) <- fieldsD
@@ -1782,6 +1751,42 @@ dotProtoServiceD stringType pkgSpec ctxt serviceIdent service = do
                  , update "optMaxReceiveMessageLength" "serverMaxReceiveMessageLength"
                  , update "optMaxMetadataSize" "serverMaxMetadataSize"
                  ]
+          where
+            update u v = HsFieldUpdate (unqual_ u) (uvar_ v)
+            handlerE handlerC adapterE methodName hsName =
+                apply handlerC [ apply methodNameC [ str_ methodName ]
+                              , apply adapterE [ uvar_ hsName ]
+                              ]
+
+     serverOptsName <- prefixedFieldName serviceName "options"
+     let serverOptsD = HsPatBind
+          defaultSrcLoc
+          (HsPVar (HsIdent serverOptsName))
+          (HsUnGuardedRhs serverOptsE)
+          []
+     let serviceServerD = HsFunBind [serverFuncD]
+           where
+             serverFuncD =
+               match_ (HsIdent serverFuncName)
+                      [ HsPRec (unqual_ serviceName)
+                               [ HsPFieldPat (unqual_ methodName) (HsPVar (HsIdent methodName))
+                               | (_, methodName, _, _, _) <- fieldsD
+                               ]
+                      , HsPApp (unqual_ "ServiceOptions")
+                        [ patVar "serverHost"
+                        , patVar "serverPort"
+                        , patVar "useCompression"
+                        , patVar "userAgentPrefix"
+                        , patVar "userAgentSuffix"
+                        , patVar "initialMetadata"
+                        , patVar "sslConfig"
+                        , patVar "logger"
+                        , patVar "serverMaxReceiveMessageLength"
+                        , patVar "serverMaxMetadataSize"
+                        ]
+                      ]
+                      (HsUnGuardedRhs (apply serverLoopE [ serverOptsE ]))
+                      []
 
      let clientT = tyApp (HsTyCon (unqual_ serviceName)) [ clientRequestT, clientResultT ]
 
@@ -1812,6 +1817,7 @@ dotProtoServiceD stringType pkgSpec ctxt serviceIdent service = do
                 [ HsIdent "request", HsIdent "response" ]
                 [ conDecl ] defaultServiceDeriving
 
+          , serverOptsD
           , serviceServerTypeD
           , serviceServerD
 
